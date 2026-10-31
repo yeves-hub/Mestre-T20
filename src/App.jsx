@@ -1,4 +1,45 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+
+// ═══════════════════════════════════════════════════
+// LISTA DE CONDIÇÕES T20
+// ═══════════════════════════════════════════════════
+const CONDICOES_T20 = [
+  "Abalado",
+  "Agarrado",
+  "Alquebrado",
+  "Apavorado",
+  "Atordoado",
+  "Caído",
+  "Cego",
+  "Confuso",
+  "Debilitado",
+  "Desprevenido",
+  "Doente",
+  "Em Chamas",
+  "Enfeitiçado",
+  "Enjoado",
+  "Enredado",
+  "Envenenado",
+  "Esmorecido",
+  "Exausto",
+  "Fascinado",
+  "Fatigado",
+  "Fraco",
+  "Frustrado",
+  "Imóvel",
+  "Inconsciente",
+  "Indefeso",
+  "Lento",
+  "Ofuscado",
+  "Paralisado",
+  "Pasmo",
+  "Petrificado",
+  "Sangrando",
+  "Sobrecarregado",
+  "Surdo",
+  "Surpreendido",
+  "Vulnerável"
+];
 
 // ═══════════════════════════════════════════════════
 // SEÇÃO 1 — ESTILOS GLOBAIS
@@ -513,6 +554,17 @@ function rolarNd(n, lados) {
 
 function rolarD100() {
   return rolarDado(100);
+}
+
+// ═══ ROLADOR DE DADOS GENÉRICO ═══
+function rolarDadosGenerico(quantidade, lados, modificador) {
+  const resultados = [];
+  for (let i = 0; i < quantidade; i++) {
+    resultados.push(rolarDado(lados));
+  }
+  const soma = resultados.reduce((a, b) => a + b, 0);
+  const total = soma + modificador;
+  return { resultados, soma, modificador, total, quantidade, lados };
 }
 
 // Consulta tabela d%
@@ -1433,13 +1485,873 @@ function ResultadoTesouro({ resultado, onRerollSuperior, onRerollMagico, onRerol
   );
 }
 
+// ─────────────────────────────────────────────
+// PARTE A — FUNÇÕES AUXILIARES DO MODO ROLAGEM
+// ─────────────────────────────────────────────
+
+// Estado inicial do assistente
+function criarManual(nd) {
+  return {
+    nd,
+    dinheiroRoll: null,
+    dinheiroExpressao: null,
+    dinheiroFaixa: null,
+    dinheiroTipo: null,       // "nenhum" | "moedas" | "riqueza"
+    dinheiroResolvido: null,
+    temBonusDinheiro: false,
+    moedasPedido: null,
+    riquezaTipo: null,
+    riquezaQtd: null,
+    riquezaQtdPedido: null,
+    riquezaDetalhesQtd: null,
+    riquezaAtual: 0,
+    riquezas: [],
+    riquezaRollAtual: null,
+    riquezaValorExprAtual: null,
+    riquezaValorPedidoAtual: null,
+    riquezaExemplosAtual: null,
+    riquezaRollAjustadoAtual: null,
+    itensRoll: null,
+    itensExpressao: null,
+    itensFaixa: null,
+    itensTipo: null,          // "nenhum" | "diverso" | "equipamento" | "pocao" | "superior" | "magico"
+    itensResolvido: null,
+    temBonusItens: false,
+    usar2D: false,
+    tipoRoll: null,
+    tipoEquipamento: null,
+    equipRollItem: null,
+    diversoRoll: null,
+    pocaoQtd: null,
+    pocaoQtdPedido: null,
+    pocaoDetalhesQtd: null,
+    pocaoAtual: 0,
+    pocoes: [],
+    superiorQtd: null,
+    superiorItemBaseRoll: null,
+    superiorItemBase: null,
+    superiorDetalhesBase: null,
+    superiorMelhoriaAtual: 0,
+    superiorMelhorias: [],
+    superiorMaterialPendente: false,
+    superiorMelhoriaTemp: null,
+    magicoTipo: null,
+    magicoRollItemBase: null,
+    magicoItemBase: null,
+    magicoDetalhesBase: null,
+    magicoRollEncanto: null,
+    magicoEncanto: null,
+    magicoEfeito: null,
+    magicoRollEspecifico: null,
+    magicoItemEspecifico: null,
+    magicoAcessorio: null,
+    magicoAcessorioPreco: null
+  };
+}
+
+// Transforma "1d3" ou "1d4+1" em { qtd, lados, bonus }. Retorna null se for número fixo.
+function pedidoDeQuantidade(expr) {
+  const m = expr.trim().match(/^(\d+)d(\d+)(?:\+(\d+))?$/);
+  if (m) return { qtd: parseInt(m[1]), lados: parseInt(m[2]), bonus: m[3] ? parseInt(m[3]) : 0 };
+  return null;
+}
+
+// Calcula a quantidade a partir do total digitado pelo mestre.
+function somaQuantidadeManual(pedido, totalRolado) {
+  return {
+    quantidade: totalRolado + pedido.bonus,
+    detalhes: `Rolou ${pedido.qtd}d${pedido.lados}${pedido.bonus ? "+"+pedido.bonus : ""} = ${totalRolado + pedido.bonus}`
+  };
+}
+
+// Transforma "1d6×10 TC" em { qtd, lados, bonus, mult, moeda }.
+function pedidoDeMoedas(expr) {
+  const limpo = expr.replace(/\s/g, "").replace(/\./g, "");
+  const moedaMatch = limpo.match(/(TC|T\$|TO)$/);
+  const moeda = moedaMatch ? moedaMatch[1] : "";
+  const semMoeda = moedaMatch ? limpo.replace(moedaMatch[0], "") : limpo;
+  const m = semMoeda.match(/^(\d+)d(\d+)(?:\+(\d+))?×(\d+)$/);
+  if (!m) return null;
+  return {
+    qtd: parseInt(m[1]),
+    lados: parseInt(m[2]),
+    bonus: m[3] ? parseInt(m[3]) : 0,
+    mult: parseInt(m[4]),
+    moeda
+  };
+}
+
+// Monta o objeto final de moedas (mesmo formato do modo automático).
+function resolverMoedasManual(expr, pedido, totalRolado) {
+  const valor = (totalRolado + pedido.bonus) * pedido.mult;
+  return {
+    tipo: "Moedas",
+    valor,
+    moeda: pedido.moeda,
+    texto: `${expr} → [${totalRolado}${pedido.bonus ? "+"+pedido.bonus : ""}] × ${pedido.mult} = ${valor} ${pedido.moeda}`,
+    detalhes: `Rolou ${pedido.qtd}d${pedido.lados}${pedido.bonus ? "+"+pedido.bonus : ""} = ${totalRolado + pedido.bonus}, multiplicado por ${pedido.mult}`
+  };
+}
+
+// Transforma "4d4 (10)" ou "6d8×1.000 (27.000)" em { qtd, lados, mult }.
+function pedidoDeValorRiqueza(expr) {
+  const antes = expr.split("(")[0].trim().replace(/\./g, "");
+  const m = antes.match(/^(\d+)d(\d+)(?:×(\d+))?$/);
+  if (!m) return null;
+  return { qtd: parseInt(m[1]), lados: parseInt(m[2]), mult: m[3] ? parseInt(m[3]) : 1 };
+}
+
+// Monta o valor final de uma riqueza.
+function resolverValorRiquezaManual(expr, pedido, totalRolado) {
+  const total = totalRolado * pedido.mult;
+  return {
+    valorTotal: total,
+    detalhesValor: `Rolou ${pedido.qtd}d${pedido.lados} = ${totalRolado}${pedido.mult !== 1 ? ` × ${pedido.mult.toLocaleString("pt-BR")}` : ""} = ${total.toLocaleString("pt-BR")} T$`
+  };
+}
+
+// Consulta a Tabela 8-2 (riquezas) com um valor digitado.
+function consultarRiquezaManual(tipoRiqueza, roll, usarBonus) {
+  const coluna = tipoRiqueza === "menor" ? 0 : tipoRiqueza === "média" ? 1 : 2;
+  const rollAjustado = usarBonus ? Math.min(roll + 20, 100) : roll;
+
+  for (const row of T8_2) {
+    const faixa = row[coluna];
+    if (faixa === "—") continue;
+    const partes = faixa.split("-");
+    const min = Number(partes[0]);
+    const max = partes[1] ? Number(partes[1]) : min;
+    if (rollAjustado >= min && rollAjustado <= max) {
+      const valorExpr = row[3];
+      return {
+        roll: rollAjustado,
+        valorExpr,
+        exemplos: row[4],
+        tipo: tipoRiqueza,
+        pedidoValor: pedidoDeValorRiqueza(valorExpr)
+      };
+    }
+  }
+  return null;
+}
+
+function materialPorRoll(v) {
+  const materiais = { 1: "Aço-rubi", 2: "Adamante", 3: "Gelo eterno", 4: "Madeira Tollon", 5: "Matéria vermelha", 6: "Mitral" };
+  return materiais[v];
+}
+
+// Finaliza a riqueza atual (usado quando não precisa rolar o valor).
+function finalizarRiquezaAtual(novo) {
+  novo.riquezas = [...novo.riquezas, {
+    roll: novo.riquezaRollAjustadoAtual,
+    valor: novo.riquezaValorExprAtual,
+    exemplos: novo.riquezaExemplosAtual,
+    tipo: novo.riquezaTipo,
+    valorTotal: 0,
+    detalhesValor: "Valor não rolado"
+  }];
+  novo.riquezaAtual += 1;
+  novo.riquezaRollAtual = null;
+  novo.riquezaValorExprAtual = null;
+  novo.riquezaValorPedidoAtual = null;
+  novo.riquezaExemplosAtual = null;
+  novo.riquezaRollAjustadoAtual = null;
+  if (novo.riquezaAtual >= novo.riquezaQtd) {
+    novo.dinheiroResolvido = {
+      tipo: "Riqueza",
+      tipoRiqueza: novo.riquezaTipo,
+      riquezas: novo.riquezas,
+      detalhes: novo.riquezaDetalhesQtd,
+      temBonus: novo.temBonusDinheiro
+    };
+  }
+}
+
+function montarResolvidoSuperior(m) {
+  return {
+    tipo: "Superior",
+    rollTipo: m.tipoRoll,
+    tipoEquipamento: m.tipoEquipamento,
+    rollItemBase: m.superiorItemBaseRoll,
+    itemBase: m.superiorItemBase,
+    detalhesBase: m.superiorDetalhesBase,
+    melhorias: m.superiorMelhorias,
+    detalhesQtd: `Quantidade fixa: ${m.superiorQtd}`,
+    usar2D: m.usar2D
+  };
+}
+
+function montarResolvidoMagico(m) {
+  return {
+    tipo: "Mágico",
+    tipoMagico: m.magicoTipo,
+    rollTipo: m.tipoRoll,
+    tipoItem: m.tipoEquipamento,
+    resultado: {
+      rollItemBase: m.magicoRollItemBase,
+      itemBase: m.magicoItemBase,
+      detalhesBase: m.magicoDetalhesBase,
+      rollEncanto: m.magicoRollEncanto,
+      encanto: m.magicoEncanto,
+      efeito: m.magicoEfeito,
+      itemEspecifico: m.magicoItemEspecifico
+    },
+    usar2D: m.usar2D
+  };
+}
+
+// Devolve o PRÓXIMO pedido de rolagem (ou null se acabou).
+function proximoPedidoManual(m) {
+  if (!m) return null;
+
+  // ── DINHEIRO ──
+  if (m.dinheiroRoll === null) {
+    return { chave: "dinheiroRoll", descricao: "Rolem 1d100 e digitem o resultado para o DINHEIRO!", qtd: 1, lados: 100 };
+  }
+  if (m.dinheiroResolvido === null) {
+    if (m.dinheiroTipo === "moedas") {
+      return {
+        chave: "moedas",
+        descricao: `Agora rolem ${m.moedasPedido.qtd}d${m.moedasPedido.lados} e digitem o total (resultado: ${m.dinheiroExpressao}).`,
+        qtd: m.moedasPedido.qtd,
+        lados: m.moedasPedido.lados
+      };
+    }
+    if (m.dinheiroTipo === "riqueza") {
+      if (m.riquezaQtd === null && m.riquezaQtdPedido) {
+        return {
+          chave: "riquezaQtd",
+          descricao: `Rolem ${m.riquezaQtdPedido.qtd}d${m.riquezaQtdPedido.lados} e digitem o total para saber QUANTAS riquezas.`,
+          qtd: m.riquezaQtdPedido.qtd,
+          lados: m.riquezaQtdPedido.lados
+        };
+      }
+      if (m.riquezaAtual < m.riquezaQtd) {
+        if (m.riquezaRollAtual === null) {
+          return {
+            chave: "riquezaRoll",
+            descricao: `Riqueza ${m.riquezaAtual + 1} de ${m.riquezaQtd}: rolem 1d100 (riqueza ${m.riquezaTipo}).`,
+            qtd: 1,
+            lados: 100
+          };
+        }
+        if (m.riquezaValorPedidoAtual) {
+          return {
+            chave: "riquezaValor",
+            descricao: `Riqueza ${m.riquezaAtual + 1} de ${m.riquezaQtd}: rolem ${m.riquezaValorPedidoAtual.qtd}d${m.riquezaValorPedidoAtual.lados} para saber o valor.`,
+            qtd: m.riquezaValorPedidoAtual.qtd,
+            lados: m.riquezaValorPedidoAtual.lados
+          };
+        }
+      }
+    }
+  }
+
+  // ── ITENS ──
+  if (m.itensRoll === null) {
+    return { chave: "itensRoll", descricao: "Rolem 1d100 e digitem o resultado para os ITENS!", qtd: 1, lados: 100 };
+  }
+  if (m.itensResolvido === null) {
+    if (m.itensTipo === "diverso") {
+      return { chave: "diversoRoll", descricao: "Rolem 1d100 e digitem o resultado (item Diverso).", qtd: 1, lados: 100 };
+    }
+    if (m.itensTipo === "equipamento") {
+      if (m.tipoRoll === null) {
+        return m.usar2D
+          ? { chave: "equipTipo", descricao: "Rolem 2d6 e digitem o MENOR valor (como no modo automático).", qtd: 2, lados: 6, escolherMenor: true }
+          : { chave: "equipTipo", descricao: "Rolem 1d6 e digitem o resultado.", qtd: 1, lados: 6 };
+      }
+      if (m.equipRollItem === null) {
+        return { chave: "equipItem", descricao: "Rolem 1d100 e digitem o resultado (item do equipamento).", qtd: 1, lados: 100 };
+      }
+    }
+    if (m.itensTipo === "pocao") {
+      if (m.pocaoQtd === null && m.pocaoQtdPedido) {
+        return {
+          chave: "pocaoQtd",
+          descricao: `Rolem ${m.pocaoQtdPedido.qtd}d${m.pocaoQtdPedido.lados} e digitem o total (quantas poções?).`,
+          qtd: m.pocaoQtdPedido.qtd,
+          lados: m.pocaoQtdPedido.lados
+        };
+      }
+      if (m.pocaoAtual < m.pocaoQtd) {
+        return {
+          chave: "pocaoRoll",
+          descricao: `Poção ${m.pocaoAtual + 1} de ${m.pocaoQtd}: rolem 1d100${m.temBonusItens ? " (o bônus +% é aplicado automaticamente)" : ""}.`,
+          qtd: 1,
+          lados: 100
+        };
+      }
+    }
+    if (m.itensTipo === "superior") {
+      if (m.tipoRoll === null) {
+        return m.usar2D
+          ? { chave: "superiorTipo", descricao: "Rolem 2d6 e digitem o MENOR valor (como no modo automático).", qtd: 2, lados: 6, escolherMenor: true }
+          : { chave: "superiorTipo", descricao: "Rolem 1d6 e digitem o resultado.", qtd: 1, lados: 6 };
+      }
+      if (m.superiorItemBaseRoll === null) {
+        return { chave: "superiorItem", descricao: "Rolem 1d100 e digitem o resultado (item base).", qtd: 1, lados: 100 };
+      }
+      if (m.superiorMelhoriaAtual < m.superiorQtd) {
+        if (m.superiorMaterialPendente) {
+          return {
+            chave: "superiorMaterial",
+            descricao: `Melhoria ${m.superiorMelhoriaAtual + 1}: caiu "Material especial"! Rolem 1d6 para o material.`,
+            qtd: 1,
+            lados: 6
+          };
+        }
+        return {
+          chave: "superiorMelhoria",
+          descricao: `Melhoria ${m.superiorMelhoriaAtual + 1} de ${m.superiorQtd}: rolem 1d100.`,
+          qtd: 1,
+          lados: 100
+        };
+      }
+    }
+    if (m.itensTipo === "magico") {
+      if (m.tipoRoll === null) {
+        return m.usar2D
+          ? { chave: "magicoTipo", descricao: "Rolem 2d6 e digitem o MENOR valor (como no modo automático).", qtd: 2, lados: 6, escolherMenor: true }
+          : { chave: "magicoTipo", descricao: "Rolem 1d6 e digitem o resultado.", qtd: 1, lados: 6 };
+      }
+      if (m.tipoEquipamento === "Acessório") {
+        if (m.magicoAcessorio === null) {
+          return { chave: "magicoAcessorio", descricao: "Rolem 1d100 e digitem o resultado (acessório mágico).", qtd: 1, lados: 100 };
+        }
+      } else {
+        if (m.magicoRollItemBase === null) {
+          return { chave: "magicoItem", descricao: "Rolem 1d100 e digitem o resultado (item base).", qtd: 1, lados: 100 };
+        }
+        if (m.magicoRollEncanto === null) {
+          return { chave: "magicoEncanto", descricao: "Rolem 1d100 e digitem o resultado (encanto).", qtd: 1, lados: 100 };
+        }
+        if (m.magicoItemEspecifico === null && m.magicoEncanto && m.magicoEncanto.includes("→")) {
+          return { chave: "magicoEspecifico", descricao: "Rolem 1d100 e digitem o resultado (item específico).", qtd: 1, lados: 100 };
+        }
+      }
+    }
+  }
+
+  return null; // concluído
+}
+
+// Aplica o valor digitado no estado e devolve o novo estado.
+function aplicarValorManual(m, chave, valor) {
+  const novo = { ...m };
+  const v = Number(valor);
+
+  switch (chave) {
+    case "dinheiroRoll": {
+      novo.dinheiroRoll = v;
+      const tabela = T8_1[novo.nd];
+      const resultado = consultarTabela(tabela.dinheiro, v);
+      const expressao = resultado.valor;
+      novo.dinheiroExpressao = expressao;
+      novo.dinheiroFaixa = `${resultado.min}-${resultado.max}`;
+      novo.temBonusDinheiro = expressao.includes("+%");
+      const limpa = expressao.replace(" +%", "");
+
+      if (limpa === "—") {
+        novo.dinheiroTipo = "nenhum";
+        novo.dinheiroResolvido = { tipo: "Nenhum" };
+      } else if (limpa.includes("riqueza")) {
+        novo.dinheiroTipo = "riqueza";
+        const match = limpa.match(/(\d+d\d+(?:\+\d+)?)\s+riquezas?\s+(menor|média|maior)/);
+        const matchSimples = limpa.match(/(\d+)\s+riqueza\s+(menor|média|maior)/);
+        novo.riquezaTipo = match ? match[2] : matchSimples[2];
+        novo.riquezaAtual = 0;
+        novo.riquezas = [];
+        if (match) {
+          novo.riquezaQtdPedido = pedidoDeQuantidade(match[1]);
+          novo.riquezaQtd = novo.riquezaQtdPedido ? null : parseInt(match[1]);
+        } else if (matchSimples) {
+          novo.riquezaQtd = parseInt(matchSimples[1]);
+          novo.riquezaDetalhesQtd = `Quantidade fixa: ${novo.riquezaQtd}`;
+          novo.riquezaQtdPedido = null;
+        }
+      } else {
+        novo.dinheiroTipo = "moedas";
+        novo.moedasPedido = pedidoDeMoedas(limpa);
+      }
+      return novo;
+    }
+
+    case "moedas": {
+      novo.dinheiroResolvido = resolverMoedasManual(novo.dinheiroExpressao.replace(" +%", ""), novo.moedasPedido, v);
+      return novo;
+    }
+
+    case "riquezaQtd": {
+      const r = somaQuantidadeManual(novo.riquezaQtdPedido, v);
+      novo.riquezaQtd = r.quantidade;
+      novo.riquezaDetalhesQtd = r.detalhes;
+      novo.riquezaAtual = 0;
+      return novo;
+    }
+
+    case "riquezaRoll": {
+      novo.riquezaRollAtual = v;
+      const info = consultarRiquezaManual(novo.riquezaTipo, v, novo.temBonusDinheiro);
+      novo.riquezaRollAjustadoAtual = info.roll;
+      novo.riquezaValorExprAtual = info.valorExpr;
+      novo.riquezaExemplosAtual = info.exemplos;
+      novo.riquezaValorPedidoAtual = info.pedidoValor;
+      if (!info.pedidoValor) {
+        finalizarRiquezaAtual(novo);
+      }
+      return novo;
+    }
+
+    case "riquezaValor": {
+      const val = resolverValorRiquezaManual(novo.riquezaValorExprAtual, novo.riquezaValorPedidoAtual, v);
+      novo.riquezas = [...novo.riquezas, {
+        roll: novo.riquezaRollAjustadoAtual,
+        valor: novo.riquezaValorExprAtual,
+        exemplos: novo.riquezaExemplosAtual,
+        tipo: novo.riquezaTipo,
+        valorTotal: val.valorTotal,
+        detalhesValor: val.detalhesValor
+      }];
+      novo.riquezaAtual += 1;
+      novo.riquezaRollAtual = null;
+      novo.riquezaValorExprAtual = null;
+      novo.riquezaValorPedidoAtual = null;
+      novo.riquezaExemplosAtual = null;
+      novo.riquezaRollAjustadoAtual = null;
+      if (novo.riquezaAtual >= novo.riquezaQtd) {
+        novo.dinheiroResolvido = {
+          tipo: "Riqueza",
+          tipoRiqueza: novo.riquezaTipo,
+          riquezas: novo.riquezas,
+          detalhes: novo.riquezaDetalhesQtd,
+          temBonus: novo.temBonusDinheiro
+        };
+      }
+      return novo;
+    }
+
+    case "itensRoll": {
+      novo.itensRoll = v;
+      const tabela = T8_1[novo.nd];
+      const resultado = consultarTabela(tabela.itens, v);
+      const expressao = resultado.valor;
+      novo.itensExpressao = expressao;
+      novo.itensFaixa = `${resultado.min}-${resultado.max}`;
+      novo.temBonusItens = expressao.includes("+%");
+      novo.usar2D = expressao.includes("2D");
+      const limpa = expressao.replace(" +%", "").replace(" 2D", "");
+
+      if (limpa === "—") {
+        novo.itensTipo = "nenhum";
+        novo.itensResolvido = { tipo: "Nenhum" };
+      } else if (limpa === "Diverso") {
+        novo.itensTipo = "diverso";
+      } else if (limpa === "Equipamento") {
+        novo.itensTipo = "equipamento";
+      } else if (limpa.includes("poção")) {
+        novo.itensTipo = "pocao";
+        const match = limpa.match(/^(\d+d\d+(?:\+\d+)?|\d+)\s+poções?$/);
+        const qtdExpr = match ? match[1] : "1";
+        novo.pocaoQtdPedido = pedidoDeQuantidade(qtdExpr);
+        novo.pocaoQtd = novo.pocaoQtdPedido ? null : parseInt(qtdExpr);
+        novo.pocaoAtual = 0;
+        novo.pocoes = [];
+      } else if (limpa.includes("Superior")) {
+        novo.itensTipo = "superior";
+        const match = limpa.match(/Superior\s+\((\d+d\d+(?:\+\d+)?|\d+)\s+melhorias?\)/);
+        novo.superiorQtd = match ? parseInt(match[1]) : 1;
+        novo.superiorItemBaseRoll = null;
+        novo.superiorItemBase = null;
+        novo.superiorMelhoriaAtual = 0;
+        novo.superiorMelhorias = [];
+        novo.superiorMaterialPendente = false;
+        novo.superiorMelhoriaTemp = null;
+      } else if (limpa.includes("Mágico")) {
+        novo.itensTipo = "magico";
+        const match = limpa.match(/Mágico\s+\((menor|médio|maior)\)/);
+        novo.magicoTipo = match ? match[1] : "menor";
+      }
+      return novo;
+    }
+
+    case "diversoRoll": {
+      const resultado = consultarTabela(T8_3, v);
+      novo.itensResolvido = { tipo: "Diverso", roll: v, item: resultado.valor };
+      return novo;
+    }
+
+    case "equipTipo": {
+      novo.tipoRoll = v;
+      if (v <= 3) novo.tipoEquipamento = "Arma";
+      else if (v <= 5) novo.tipoEquipamento = "Armadura/Escudo";
+      else novo.tipoEquipamento = "Esotérico";
+      return novo;
+    }
+
+    case "equipItem": {
+      novo.equipRollItem = v;
+      let tabela;
+      if (novo.tipoEquipamento === "Arma") tabela = T8_4.armas;
+      else if (novo.tipoEquipamento === "Armadura/Escudo") tabela = T8_4.armaduras;
+      else tabela = T8_4.esotericos;
+      const resultado = consultarTabela(tabela, v);
+      const item = resultado.valor;
+      const detalhes = novo.tipoEquipamento === "Arma" ? (T8_4.detalhesArmas[item] || null) : null;
+      novo.itensResolvido = {
+        tipo: "Equipamento",
+        rollTipo: novo.tipoRoll,
+        tipoEquipamento: novo.tipoEquipamento,
+        rollItem: v,
+        item,
+        detalhes,
+        usar2D: novo.usar2D
+      };
+      return novo;
+    }
+
+    case "pocaoQtd": {
+      const r = somaQuantidadeManual(novo.pocaoQtdPedido, v);
+      novo.pocaoQtd = r.quantidade;
+      novo.pocaoDetalhesQtd = r.detalhes;
+      novo.pocaoAtual = 0;
+      return novo;
+    }
+
+    case "pocaoRoll": {
+      const roll = novo.temBonusItens ? Math.min(v + 20, 100) : v;
+      const resultado = consultarTabela(T8_12, roll);
+      novo.pocoes = [...novo.pocoes, { roll, pocao: resultado.valor[0], preco: resultado.valor[1] }];
+      novo.pocaoAtual += 1;
+      if (novo.pocaoAtual >= novo.pocaoQtd) {
+        novo.itensResolvido = {
+          tipo: "Poção",
+          quantidade: novo.pocaoQtd,
+          pocoes: novo.pocoes,
+          detalhesQtd: novo.pocaoDetalhesQtd || `Quantidade fixa: ${novo.pocaoQtd}`,
+          usarBonus: novo.temBonusItens
+        };
+      }
+      return novo;
+    }
+
+    case "superiorTipo": {
+      novo.tipoRoll = v;
+      if (v <= 3) novo.tipoEquipamento = "Arma";
+      else if (v <= 5) novo.tipoEquipamento = "Armadura/Escudo";
+      else novo.tipoEquipamento = "Esotérico";
+      return novo;
+    }
+
+    case "superiorItem": {
+      novo.superiorItemBaseRoll = v;
+      let tabelaBase;
+      if (novo.tipoEquipamento === "Arma") tabelaBase = T8_4.armas;
+      else if (novo.tipoEquipamento === "Armadura/Escudo") tabelaBase = T8_4.armaduras;
+      else tabelaBase = T8_4.esotericos;
+      const resultado = consultarTabela(tabelaBase, v);
+      const itemBase = resultado.valor;
+      novo.superiorItemBase = itemBase;
+      novo.superiorDetalhesBase = novo.tipoEquipamento === "Arma" ? (T8_4.detalhesArmas[itemBase] || null) :
+        novo.tipoEquipamento === "Armadura/Escudo" ? (T8_4.detalhesArmaduras[itemBase] || null) : null;
+      return novo;
+    }
+
+    case "superiorMelhoria": {
+      let tabela;
+      if (novo.tipoEquipamento === "Arma") tabela = T8_5.armas;
+      else if (novo.tipoEquipamento === "Armadura/Escudo") tabela = T8_5.armaduras;
+      else tabela = T8_5.esotericos;
+      const resultado = consultarTabela(tabela, v);
+      const melhoria = { roll: v, melhoria: resultado.valor };
+      if (resultado.valor === "Material especial") {
+        novo.superiorMaterialPendente = true;
+        novo.superiorMelhoriaTemp = melhoria;
+      } else {
+        novo.superiorMelhorias = [...novo.superiorMelhorias, melhoria];
+        novo.superiorMelhoriaAtual += 1;
+        novo.superiorMaterialPendente = false;
+        novo.superiorMelhoriaTemp = null;
+        if (novo.superiorMelhoriaAtual >= novo.superiorQtd) {
+          novo.itensResolvido = montarResolvidoSuperior(novo);
+        }
+      }
+      return novo;
+    }
+
+    case "superiorMaterial": {
+      const melhoria = { ...novo.superiorMelhoriaTemp, material: { roll: v, material: materialPorRoll(v) } };
+      novo.superiorMelhorias = [...novo.superiorMelhorias, melhoria];
+      novo.superiorMelhoriaAtual += 1;
+      novo.superiorMaterialPendente = false;
+      novo.superiorMelhoriaTemp = null;
+      if (novo.superiorMelhoriaAtual >= novo.superiorQtd) {
+        novo.itensResolvido = montarResolvidoSuperior(novo);
+      }
+      return novo;
+    }
+
+    case "magicoTipo": {
+      novo.tipoRoll = v;
+      if (v <= 2) novo.tipoEquipamento = "Arma";
+      else if (v === 3) novo.tipoEquipamento = "Armadura/Escudo";
+      else novo.tipoEquipamento = "Acessório";
+      return novo;
+    }
+
+    case "magicoAcessorio": {
+      let tabelaAcessorios;
+      if (novo.magicoTipo === "menor") tabelaAcessorios = T8_13;
+      else if (novo.magicoTipo === "médio") tabelaAcessorios = T8_14;
+      else tabelaAcessorios = T8_15;
+      const resultado = consultarTabela(tabelaAcessorios, v);
+      novo.magicoAcessorio = resultado.valor[0];
+      novo.magicoAcessorioPreco = resultado.valor[1];
+      novo.itensResolvido = {
+        tipo: "Mágico",
+        tipoMagico: novo.magicoTipo,
+        rollTipo: novo.tipoRoll,
+        tipoItem: "Acessório",
+        resultado: { roll: v, acessorio: novo.magicoAcessorio, preco: novo.magicoAcessorioPreco },
+        usar2D: novo.usar2D
+      };
+      return novo;
+    }
+
+    case "magicoItem": {
+      novo.magicoRollItemBase = v;
+      let tabelaBase;
+      if (novo.tipoEquipamento === "Arma") tabelaBase = T8_4.armas;
+      else tabelaBase = T8_4.armaduras;
+      const resultado = consultarTabela(tabelaBase, v);
+      const itemBase = resultado.valor;
+      novo.magicoItemBase = itemBase;
+      novo.magicoDetalhesBase = novo.tipoEquipamento === "Arma" ? (T8_4.detalhesArmas[itemBase] || null) :
+        (T8_4.detalhesArmaduras[itemBase] || null);
+      return novo;
+    }
+
+    case "magicoEncanto": {
+      novo.magicoRollEncanto = v;
+      let tabelaEncantos;
+      if (novo.tipoEquipamento === "Arma") tabelaEncantos = T8_8;
+      else tabelaEncantos = T8_10;
+      const resultado = consultarTabela(tabelaEncantos, v);
+      novo.magicoEncanto = resultado.valor[0];
+      novo.magicoEfeito = resultado.valor[1];
+      if (!novo.magicoEncanto.includes("→")) {
+        novo.itensResolvido = montarResolvidoMagico(novo);
+      }
+      return novo;
+    }
+
+    case "magicoEspecifico": {
+      novo.magicoRollEspecifico = v;
+      let tabelaEspecifica;
+      if (novo.tipoEquipamento === "Arma") tabelaEspecifica = T8_9;
+      else tabelaEspecifica = T8_11;
+      const resultado = consultarTabela(tabelaEspecifica, v);
+      novo.magicoItemEspecifico = { roll: v, item: resultado.valor[0], preco: resultado.valor[1] };
+      novo.itensResolvido = montarResolvidoMagico(novo);
+      return novo;
+    }
+  }
+
+  return novo;
+}
+
+// ─────────────────────────────────────────────
+// PARTE B — COMPONENTE DO ASSISTENTE
+// ─────────────────────────────────────────────
+
+function ModoRolagemTesouro({ nd }) {
+  const [manual, setManual] = useState(() => criarManual(nd));
+  const [pedido, setPedido] = useState(() => proximoPedidoManual(criarManual(nd)));
+  const [valor, setValor] = useState("");
+  const [concluido, setConcluido] = useState(null);
+  const [log, setLog] = useState([]);
+
+  const reiniciar = () => {
+    const novo = criarManual(nd);
+    setManual(novo);
+    setPedido(proximoPedidoManual(novo));
+    setValor("");
+    setConcluido(null);
+    setLog([]);
+  };
+
+  const avancar = () => {
+    if (pedido === null) return;
+    const v = parseInt(valor);
+    if (isNaN(v)) return;
+
+    const novoManual = aplicarValorManual(manual, pedido.chave, v);
+    const novoPedido = proximoPedidoManual(novoManual);
+
+    setLog(prev => [...prev, { descricao: pedido.descricao, resultado: v }]);
+    setManual(novoManual);
+    setValor("");
+
+    if (novoPedido === null) {
+      setPedido(null);
+      setConcluido({
+        nd: novoManual.nd,
+        dinheiro: {
+          roll: novoManual.dinheiroRoll,
+          faixa: novoManual.dinheiroFaixa,
+          expressao: novoManual.dinheiroExpressao,
+          resolvido: novoManual.dinheiroResolvido
+        },
+        itens: {
+          roll: novoManual.itensRoll,
+          faixa: novoManual.itensFaixa,
+          expressao: novoManual.itensExpressao,
+          resolvido: novoManual.itensResolvido
+        }
+      });
+    } else {
+      setPedido(novoPedido);
+    }
+  };
+
+  const aoRerolarSuperior = () => {
+    setConcluido(prev => {
+      if (!prev || !prev.itens.resolvido || prev.itens.resolvido.tipo !== "Superior") return prev;
+      return { ...prev, itens: { ...prev.itens, resolvido: rerolarMelhoriasSuperior(prev.itens.resolvido) } };
+    });
+  };
+
+  const aoRerolarMelhoriaSuperior = (i) => {
+    setConcluido(prev => {
+      if (!prev || !prev.itens.resolvido || prev.itens.resolvido.tipo !== "Superior") return prev;
+      return { ...prev, itens: { ...prev.itens, resolvido: rerolarMelhoriaSuperior(prev.itens.resolvido, i) } };
+    });
+  };
+
+  const aoRerolarMagico = () => {
+    setConcluido(prev => {
+      if (!prev || !prev.itens.resolvido || prev.itens.resolvido.tipo !== "Mágico") return prev;
+      return { ...prev, itens: { ...prev.itens, resolvido: rerolarEncantoMagico(prev.itens.resolvido) } };
+    });
+  };
+
+  return (
+    <div style={{ marginTop: 4 }}>
+      {concluido ? (
+        <>
+          <ResultadoTesouro
+            resultado={concluido}
+            onRerollSuperior={aoRerolarSuperior}
+            onRerollMagico={aoRerolarMagico}
+            onRerollMelhoriaSuperior={aoRerolarMelhoriaSuperior}
+          />
+          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+            <button onClick={reiniciar} style={{ ...s.btnPrimario, flex: 1 }}>
+              🎲 Novo Tesouro
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div style={{
+            padding: 12,
+            borderRadius: 8,
+            background: "linear-gradient(135deg,#3a1e0044,#1c0e0044)",
+            border: "1px solid #c8922a55",
+            marginBottom: 10
+          }}>
+            {pedido ? (
+              <>
+                <div style={{ fontFamily: "'Cinzel',serif", fontSize: 11, letterSpacing: 1, color: "#e8a020", marginBottom: 6 }}>
+                  🎭 PASSO {log.length + 1}
+                </div>
+                <div style={{ fontFamily: "'IM Fell English',Georgia,serif", fontSize: 14, color: "#f0d8a0", marginBottom: 6 }}>
+                  {pedido.descricao}
+                </div>
+                <div style={{
+                  display: "inline-block",
+                  padding: "6px 14px",
+                  borderRadius: 6,
+                  background: "#0d070088",
+                  border: "1px solid #c8922a",
+                  fontFamily: "'Cinzel',serif",
+                  fontWeight: 900,
+                  fontSize: 20,
+                  color: "#e8a020",
+                  marginBottom: 10
+                }}>
+                  {pedido.qtd}d{pedido.lados}
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input
+                    type="number"
+                    placeholder="Resultado"
+                    value={valor}
+                    onChange={e => setValor(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter") avancar(); }}
+                    style={{ ...s.input, flex: 1, fontSize: 16, textAlign: "center" }}
+                    autoFocus
+                  />
+                  <button onClick={avancar} style={{ ...s.btnPrimario, flex: 0.6 }}>
+                    Avançar
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div style={{ textAlign: "center", color: "#7a5020", fontStyle: "italic" }}>
+                Tesouro concluído!
+              </div>
+            )}
+          </div>
+
+          {log.length > 0 && (
+            <div>
+              <div style={{ fontFamily: "'Cinzel',serif", fontSize: 9, letterSpacing: 2, color: "#7a5020", marginBottom: 6 }}>
+                ROLAGENS REALIZADAS
+              </div>
+              {log.map((l, i) => (
+                <div key={i} style={{
+                  padding: "4px 8px",
+                  marginBottom: 4,
+                  borderRadius: 4,
+                  background: "#0d070066",
+                  fontFamily: "'IM Fell English',Georgia,serif",
+                  fontSize: 11,
+                  color: "#c8922a"
+                }}>
+                  <span style={{ color: "#e8a020", fontWeight: 700 }}>{l.resultado}</span> — {l.descricao}
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════════════
 // SEÇÃO 7 — APP PRINCIPAL
 // ═══════════════════════════════════════════════════
 export default function App() {
   const [ndSelecionado, setNdSelecionado] = useState("5");
+  const [modoRolagem, setModoRolagem] = useState(false);
   const [ultimoResultado, setUltimoResultado] = useState(null);
   const [historico, setHistorico] = useState([]);
+  const [dadosQtd, setDadosQtd] = useState("1");
+  const [dadosLados, setDadosLados] = useState("d20");
+  const [dadosMod, setDadosMod] = useState("0");
+  const [dadosResultado, setDadosResultado] = useState(null);
+  const [dadosHistorico, setDadosHistorico] = useState([]);
+  const [combatentes, setCombatentes] = useState([]);
+  const [novoNome, setNovoNome] = useState("");
+  const [novaIniciativa, setNovaIniciativa] = useState("");
+  const [novasCondicoes, setNovasCondicoes] = useState("");
+  const [turnoAtual, setTurnoAtual] = useState(null);
+  const [rodada, setRodada] = useState(1);
+  const [combatenteCondicaoId, setCombatenteCondicaoId] = useState(null);
+  const [condicaoSel, setCondicaoSel] = useState(CONDICOES_T20[0]);
+  const [condicaoDuracao, setCondicaoDuracao] = useState("1");
 
   const ndsDisponiveis = Object.keys(T8_1);
 
@@ -1496,6 +2408,187 @@ export default function App() {
     });
   };
 
+  const handleRolarDados = () => {
+    const qtd = parseInt(dadosQtd) || 1;
+    const lados = parseInt(dadosLados.replace("d", ""));
+    const mod = parseInt(dadosMod) || 0;
+    const resultado = rolarDadosGenerico(qtd, lados, mod);
+    setDadosResultado(resultado);
+    setDadosHistorico(prev => [resultado, ...prev].slice(0, 10));
+  };
+
+  const handleLimparDados = () => {
+    setDadosResultado(null);
+    setDadosHistorico([]);
+  };
+
+  const miniBtn = {
+    padding: "5px 8px",
+    borderRadius: 4,
+    border: "1px solid #8b5e1a",
+    background: "#2a1800",
+    color: "#c8922a",
+    fontFamily: "'Cinzel',serif",
+    fontSize: 10,
+    cursor: "pointer"
+  };
+
+  const resetarBatalha = () => {
+    if (!window.confirm("Tem certeza que deseja iniciar uma nova batalha? Todos os combatentes serão removidos.")) return;
+    setCombatentes([]);
+    setTurnoAtual(null);
+    setRodada(1);
+    setCombatenteCondicaoId(null);
+  };
+
+  const adicionarCombatente = () => {
+    const nome = novoNome.trim();
+    const iniciativa = parseInt(novaIniciativa);
+    if (!nome || isNaN(iniciativa)) return;
+    const novo = {
+      id: Date.now(),
+      nome,
+      iniciativa,
+      condicoes: novasCondicoes.trim(),
+      preparado: false, 
+      surpreendido: false
+    };
+    setCombatentes(prev => [...prev, novo]);
+    setNovoNome("");
+    setNovaIniciativa("");
+    setNovasCondicoes("");
+    if (turnoAtual === null) setTurnoAtual(0);
+  };
+
+  const rolarIniciativaApp = () => {
+    setNovaIniciativa(String(rolarDado(20)));
+  };
+
+  const organizarPorIniciativa = () => {
+    setCombatentes(prev => [...prev].sort((a, b) => b.iniciativa - a.iniciativa));
+    if (combatentes.length > 0) setTurnoAtual(0);
+  };
+
+  const removerCombatente = (id) => {
+    setCombatentes(prev => prev.filter(c => c.id !== id));
+    setTurnoAtual(prev => {
+      if (prev === null) return null;
+      const novoTotal = combatentes.length - 1;
+      if (novoTotal === 0) return null;
+      if (prev >= novoTotal) return 0;
+      return prev;
+    });
+  };
+
+  const moverCombatente = (indice, direcao) => {
+    setCombatentes(prev => {
+      const novo = [...prev];
+      const destino = indice + direcao;
+      if (destino < 0 || destino >= novo.length) return prev;
+      [novo[indice], novo[destino]] = [novo[destino], novo[indice]];
+      return novo;
+    });
+  };
+
+  const adiarCombatente = (id) => {
+    setCombatentes(prev => {
+      const idx = prev.findIndex(c => c.id === id);
+      if (idx === -1) return prev;
+      const novo = [...prev];
+      const [removido] = novo.splice(idx, 1);
+      novo.push(removido);
+      return novo;
+    });
+  };
+
+  const prepararAcao = (id) => {
+    setCombatentes(prev => prev.map(c => c.id === id ? { ...c, preparado: !c.preparado } : c));
+  };
+
+  const adicionarCondicao = (id) => {
+    const duracao = condicaoDuracao === "perm" ? "perm" : parseInt(condicaoDuracao);
+    if (condicaoDuracao !== "perm" && (isNaN(duracao) || duracao <= 0)) return;
+    setCombatentes(prev => prev.map(c => {
+      if (c.id !== id) return c;
+      const novas = [...(c.condicoesAtivas || []), { nome: condicaoSel, duracao }];
+      return { ...c, condicoesAtivas: novas };
+    }));
+    setCombatenteCondicaoId(null);
+  };
+
+  const removerCondicao = (idCombatente, indiceCondicao) => {
+    setCombatentes(prev => prev.map(c => {
+      if (c.id !== idCombatente) return c;
+      const novas = (c.condicoesAtivas || []).filter((_, i) => i !== indiceCondicao);
+      return { ...c, condicoesAtivas: novas };
+    }));
+  };
+
+  const decrementarCondicoes = () => {
+    setCombatentes(prev => prev.map(c => {
+      if (!c.condicoesAtivas || c.condicoesAtivas.length === 0) return c;
+      const novas = c.condicoesAtivas
+        .map(cond => cond.duracao === "perm" ? cond : { ...cond, duracao: cond.duracao - 1 })
+        .filter(cond => cond.duracao === "perm" || cond.duracao > 0);
+      return { ...c, condicoesAtivas: novas };
+    }));
+  };
+
+  useEffect(() => {
+    if (rodada > 1) {
+      decrementarCondicoes();
+    }
+  }, [rodada]);
+
+  const toggleSurpreendido = (id) => {
+    setCombatentes(prev => prev.map(c => c.id === id ? { ...c, surpreendido: !c.surpreendido } : c));
+  };
+
+  const avancarTurnoInteligente = () => {
+    if (combatentes.length === 0) return;
+
+    if (rodada === 1) {
+      const atual = turnoAtual === null ? 0 : turnoAtual;
+      let proximoIdx = -1;
+
+      // Procura o próximo combatente que NÃO está surpreendido
+      for (let i = 1; i <= combatentes.length; i++) {
+        const idx = (atual + i) % combatentes.length;
+        if (!combatentes[idx].surpreendido) {
+          proximoIdx = idx;
+          break;
+        }
+      }
+
+      if (proximoIdx === -1) {
+        // Todos estão surpreendidos
+        setRodada(2);
+        setCombatentes(prev => prev.map(c => ({ ...c, surpreendido: false })));
+        setTurnoAtual(0);
+        return;
+      }
+
+      if (proximoIdx <= atual) {
+        // Deu a volta completa na rodada 1 — hora de virar para a rodada 2
+        setRodada(2);
+        setCombatentes(prev => prev.map(c => ({ ...c, surpreendido: false })));
+        setTurnoAtual(0);
+        return;
+      }
+
+      setTurnoAtual(proximoIdx);
+    } else {
+      setTurnoAtual(prev => {
+        if (prev === null) return 0;
+        const proximo = (prev + 1) % combatentes.length;
+        if (proximo === 0) {
+          setRodada(r => r + 1);
+        }
+        return proximo;
+      });
+    }
+  };
+
   return (
     <>
       <link
@@ -1531,14 +2624,36 @@ export default function App() {
             ))}
           </select>
 
-          <div style={{ display: "flex", gap: 10 }}>
-            <button onClick={handleRolar} style={{ ...s.btnPrimario, flex: 1 }}>
-              🎲 Rolar Tesouro
-            </button>
-            <button onClick={handleLimpar} style={{ ...s.btn, flex: 0.4 }}>
-              🗑 Limpar
-            </button>
-          </div>
+          <button
+            onClick={() => setModoRolagem(v => !v)}
+            style={{ ...s.btn, width: "100%", marginBottom: 10 }}
+          >
+            {modoRolagem ? "🎲 Voltar ao Modo Automático" : "🎭 Ativar Modo Rolagem (jogadores rolam)"}
+          </button>
+
+          {modoRolagem ? (
+            <ModoRolagemTesouro key={ndSelecionado} nd={ndSelecionado} />
+          ) : (
+            <>
+              <div style={{ display: "flex", gap: 10 }}>
+                <button onClick={handleRolar} style={{ ...s.btnPrimario, flex: 1 }}>
+                  🎲 Rolar Tesouro
+                </button>
+                <button onClick={handleLimpar} style={{ ...s.btn, flex: 0.4 }}>
+                  🗑 Limpar
+                </button>
+              </div>
+
+              {ultimoResultado && (
+                <ResultadoTesouro
+                  resultado={ultimoResultado}
+                  onRerollSuperior={handleRerollSuperior}
+                  onRerollMagico={handleRerollMagico}
+                  onRerollMelhoriaSuperior={handleRerollMelhoriaSuperior}
+                />
+              )}
+            </>
+          )}
 
           {ultimoResultado && (
             <ResultadoTesouro
@@ -1574,6 +2689,416 @@ export default function App() {
             ))}
           </Secao>
         )}
+
+        <DiamondDivider />
+        
+        <Secao icone="🎲" titulo="Rolador de Dados">
+          <label style={s.label}>Quantidade de dados</label>
+          <input
+            type="number"
+            min="1"
+            max="20"
+            value={dadosQtd}
+            onChange={e => setDadosQtd(e.target.value)}
+            style={{ ...s.input, marginBottom: 10, maxWidth: 100 }}
+          />
+
+          <label style={s.label}>Tipo de dado</label>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+            {["d4","d6","d8","d10","d12","d20","d100"].map(d => (
+              <button
+                key={d}
+                onClick={() => setDadosLados(d)}
+                style={{
+                  ...s.btn,
+                  padding: "8px 12px",
+                  fontSize: 11,
+                  letterSpacing: 1,
+                  border: dadosLados === d ? "2px solid #e8a020" : "1px solid #8b5e1a",
+                  background: dadosLados === d ? "linear-gradient(180deg,#5a3010,#2a1800)" : "linear-gradient(180deg,#3a1e00,#1c0e00)",
+                  color: dadosLados === d ? "#e8a020" : "#c8922a",
+                }}
+              >
+                {d}
+              </button>
+            ))}
+          </div>
+
+          <label style={s.label}>Modificador</label>
+          <input
+            type="number"
+            value={dadosMod}
+            onChange={e => setDadosMod(e.target.value)}
+            style={{ ...s.input, marginBottom: 12, maxWidth: 100 }}
+          />
+
+          <div style={{ display: "flex", gap: 10 }}>
+            <button onClick={handleRolarDados} style={{ ...s.btnPrimario, flex: 1 }}>
+              🎲 Rolar {dadosQtd}{dadosLados}{parseInt(dadosMod) >= 0 ? "+"+dadosMod : dadosMod}
+            </button>
+            <button onClick={handleLimparDados} style={{ ...s.btn, flex: 0.4 }}>
+              🗑 Limpar
+            </button>
+          </div>
+
+          {dadosResultado && (
+            <div style={{
+              marginTop: 12,
+              padding: 14,
+              borderRadius: 8,
+              background: "linear-gradient(135deg,#3a1e0044,#1c0e0044)",
+              border: "1px solid #c8922a55"
+            }}>
+              <div style={{
+                fontFamily: "'Cinzel',serif",
+                fontSize: 12,
+                letterSpacing: 2,
+                color: "#e8a020",
+                marginBottom: 10,
+                textAlign: "center"
+              }}>
+                {dadosResultado.quantidade}{dadosLados}{parseInt(dadosMod) >= 0 ? "+"+dadosMod : dadosMod}
+              </div>
+
+              {dadosResultado.quantidade > 1 && (
+                <div style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 6,
+                  justifyContent: "center",
+                  marginBottom: 10
+                }}>
+                  {dadosResultado.resultados.map((r, i) => (
+                    <div key={i} style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 6,
+                      background: "#0d070088",
+                      border: "1px solid #8b5e1a",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontFamily: "'Cinzel',serif",
+                      fontSize: 14,
+                      fontWeight: 700,
+                      color: "#f0d8a0"
+                    }}>
+                      {r}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div style={{
+                textAlign: "center",
+                fontFamily: "'Cinzel',serif",
+                fontSize: 22,
+                fontWeight: 900,
+                color: "#e8a020"
+              }}>
+                Total: {dadosResultado.total}
+              </div>
+
+              {dadosResultado.modificador !== 0 && (
+                <div style={{
+                  textAlign: "center",
+                  fontFamily: "'IM Fell English',Georgia,serif",
+                  fontSize: 11,
+                  color: "#7a5020",
+                  marginTop: 4
+                }}>
+                  Soma dos dados: {dadosResultado.soma} {dadosResultado.modificador >= 0 ? "+" : ""}{dadosResultado.modificador} = {dadosResultado.total}
+                </div>
+              )}
+            </div>
+          )}
+
+          {dadosHistorico.length > 1 && (
+            <div style={{ marginTop: 12 }}>
+              <div style={{
+                fontFamily: "'Cinzel',serif",
+                fontSize: 9,
+                letterSpacing: 2,
+                color: "#7a5020",
+                marginBottom: 6
+              }}>
+                HISTÓRICO
+              </div>
+              {dadosHistorico.slice(1).map((h, i) => (
+                <div key={i} style={{
+                  padding: "4px 8px",
+                  marginBottom: 4,
+                  borderRadius: 4,
+                  background: "#0d070066",
+                  fontFamily: "'IM Fell English',Georgia,serif",
+                  fontSize: 11,
+                  color: "#c8922a",
+                  display: "flex",
+                  justifyContent: "space-between"
+                }}>
+                  <span>{h.quantidade}d{h.lados}{h.modificador >= 0 ? "+"+h.modificador : h.modificador}</span>
+                  <span style={{ color: "#e8a020", fontWeight: 700 }}>{h.total}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Secao>
+
+        <Secao icone="⚔️" titulo="Controle de Iniciativas">
+          <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+            <input
+              placeholder="Nome do personagem/NPC"
+              value={novoNome}
+              onChange={e => setNovoNome(e.target.value)}
+              style={{ ...s.input, flex: 2, minWidth: 140 }}
+            />
+            <div style={{ display: "flex", gap: 6, flex: 1, minWidth: 120 }}>
+              <input
+                type="number"
+                placeholder="Iniciativa"
+                value={novaIniciativa}
+                onChange={e => setNovaIniciativa(e.target.value)}
+                style={{ ...s.input, flex: 1 }}
+              />
+              <button
+                onClick={rolarIniciativaApp}
+                style={{ ...s.btn, padding: "8px 12px" }}
+                title="Rolar 1d20 para o NPC"
+              >
+                🎲
+              </button>
+            </div>
+            <button onClick={adicionarCombatente} style={{ ...s.btnPrimario, flex: 1, minWidth: 120 }}>
+              Adicionar
+            </button>
+          </div>
+
+          <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+            <input
+              placeholder="Condições (opcional)"
+              value={novasCondicoes}
+              onChange={e => setNovasCondicoes(e.target.value)}
+              style={{ ...s.input, flex: 1 }}
+            />
+            <button onClick={organizarPorIniciativa} style={{ ...s.btn, flex: 1 }}>
+              ⬇️ Organizar (maior → menor)
+            </button>
+          </div>
+
+          <div style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 8,
+            marginBottom: 10,
+            padding: "8px 10px",
+            borderRadius: 6,
+            background: "#1c0e0088",
+            border: "1px solid #8b5e1a55"
+          }}>
+            <div style={{ fontFamily: "'Cinzel',serif", fontSize: 11, color: "#c8922a" }}>
+              Rodada {rodada}
+            </div>
+            {combatentes.length > 0 && turnoAtual !== null && (
+              <div style={{ fontFamily: "'Cinzel',serif", fontSize: 11, color: "#e8a020", fontWeight: 700 }}>
+                Turno: {combatentes[turnoAtual].nome}
+              </div>
+            )}
+            <button onClick={avancarTurnoInteligente} style={{ ...s.btn, padding: "6px 12px" }}>
+              ▶️ Próximo turno
+            </button>
+            <button
+              onClick={resetarBatalha}
+              style={{ ...s.btn, padding: "6px 12px" }}
+            >
+              ⚔️ Nova Batalha
+            </button>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {combatentes.length === 0 && (
+              <div style={{
+                textAlign: "center",
+                padding: 20,
+                color: "#7a5020",
+                fontStyle: "italic",
+                fontFamily: "'IM Fell English',Georgia,serif"
+              }}>
+                Nenhum combatente adicionado. Adicione os personagens e NPCs para começar o combate.
+              </div>
+            )}
+
+            {combatentes.map((c, i) => (
+              <div key={c.id} style={{
+                padding: 10,
+                borderRadius: 6,
+                background: turnoAtual === i ? "linear-gradient(135deg,#5a301066,#2a180066)" : "#0d070088",
+                border: turnoAtual === i ? "2px solid #e8a020" : "1px solid #8b5e1a55",
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                flexWrap: "wrap"
+              }}>
+                <div style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: 4,
+                  background: "#1c0e00",
+                  border: "1px solid #c8922a",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontFamily: "'Cinzel',serif",
+                  fontWeight: 900,
+                  fontSize: 13,
+                  color: "#e8a020",
+                  flexShrink: 0
+                }}>
+                  {c.iniciativa}
+                </div>
+
+                <div style={{ flex: 1, minWidth: 100 }}>
+                <div style={{ fontFamily: "'Cinzel',serif", fontSize: 12, fontWeight: 700, color: turnoAtual === i ? "#e8a020" : "#f0d8a0", opacity: c.surpreendido ? 0.4 : 1 }}>
+                    {turnoAtual === i && "▶ "}{c.nome}
+                    {c.preparado && " 🎯"}
+                  </div>
+                  {c.condicoes && (
+                    <div style={{ fontFamily: "'IM Fell English',Georgia,serif", fontSize: 10, color: "#c8922a", marginTop: 2 }}>
+                      {c.condicoes}
+                    </div>
+                  )}
+                  {c.condicoesAtivas && c.condicoesAtivas.length > 0 && (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 4 }}>
+                      {c.condicoesAtivas.map((cond, idx) => (
+                        <div
+                          key={idx}
+                          onClick={() => removerCondicao(c.id, idx)}
+                          style={{
+                            padding: "2px 6px",
+                            borderRadius: 3,
+                            background: "#5a301066",
+                            border: "1px solid #8b5e1a",
+                            fontFamily: "'IM Fell English',Georgia,serif",
+                            fontSize: 9,
+                            color: "#e8a020",
+                            cursor: "pointer"
+                          }}
+                          title="Clique para remover"
+                        >
+                          {cond.nome} {cond.duracao === "perm" ? "∞" : `(${cond.duracao})`}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                    <button onClick={() => moverCombatente(i, -1)} style={{ ...miniBtn, padding: "2px 6px", fontSize: 9 }} title="Subir">▲</button>
+                    <button onClick={() => moverCombatente(i, 1)} style={{ ...miniBtn, padding: "2px 6px", fontSize: 9 }} title="Descer">▼</button>
+                  </div>
+
+                  <button onClick={() => adiarCombatente(c.id)} style={miniBtn} title="Adiar">⏸️</button>
+                  <button
+                    onClick={() => prepararAcao(c.id)}
+                    style={{
+                      ...miniBtn,
+                      color: c.preparado ? "#e8a020" : "#c8922a",
+                      border: c.preparado ? "1px solid #e8a020" : "1px solid #8b5e1a"
+                    }}
+                    title="Preparar ação"
+                  >
+                    🎯
+                  </button>
+                  <button
+                    onClick={() => toggleSurpreendido(c.id)}
+                    style={{
+                      ...miniBtn,
+                      color: c.surpreendido ? "#e8a020" : "#c8922a",
+                      border: c.surpreendido ? "1px solid #e8a020" : "1px solid #8b5e1a",
+                      background: c.surpreendido ? "#5a301066" : "#2a1800"
+                    }}
+                    title={c.surpreendido ? "Remover status Surpreendido" : "Marcar como Surpreendido"}
+                  >
+                    😵
+                  </button>
+                  <button
+                    onClick={() => setCombatenteCondicaoId(combatenteCondicaoId === c.id ? null : c.id)}
+                    style={{
+                      ...miniBtn,
+                      color: "#c8922a",
+                      border: "1px solid #8b5e1a"
+                    }}
+                    title="Adicionar condição"
+                  >
+                    🩹
+                  </button>
+                  <button
+                    onClick={() => removerCombatente(c.id)}
+                    style={{ ...miniBtn, color: "#a04040", border: "1px solid #a04040" }}
+                    title="Remover"
+                  >
+                    ✖
+                  </button>
+                </div>
+              </div>
+            ))}
+                        {combatenteCondicaoId !== null && (() => {
+              const c = combatentes.find(x => x.id === combatenteCondicaoId);
+              if (!c) return null;
+              return (
+                <div style={{
+                  padding: 10,
+                  borderRadius: 6,
+                  background: "#1c0e00",
+                  border: "1px solid #c8922a",
+                  marginTop: 4
+                }}>
+                  <div style={{ fontFamily: "'Cinzel',serif", fontSize: 11, color: "#e8a020", marginBottom: 8 }}>
+                    Adicionar condição para: {c.nome}
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                    <select
+                      value={condicaoSel}
+                      onChange={e => setCondicaoSel(e.target.value)}
+                      style={{ ...s.input, flex: 2, minWidth: 150 }}
+                    >
+                      {CONDICOES_T20.map(cond => (
+                        <option key={cond} value={cond} style={{ background: "#1c0e00" }}>{cond}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      placeholder="Rodadas"
+                      value={condicaoDuracao}
+                      onChange={e => setCondicaoDuracao(e.target.value)}
+                      style={{ ...s.input, width: 70 }}
+                    />
+                    <button
+                      onClick={() => setCondicaoDuracao("perm")}
+                      style={{
+                        ...miniBtn,
+                        color: condicaoDuracao === "perm" ? "#e8a020" : "#c8922a",
+                        border: condicaoDuracao === "perm" ? "1px solid #e8a020" : "1px solid #8b5e1a"
+                      }}
+                    >
+                      ∞
+                    </button>
+                    <button onClick={() => adicionarCondicao(c.id)} style={{ ...s.btnPrimario, padding: "6px 12px" }}>
+                      ✓ Aplicar
+                    </button>
+                    <button onClick={() => setCombatenteCondicaoId(null)} style={{ ...s.btn, padding: "6px 12px" }}>
+                      ✖
+                    </button>
+                  </div>
+                  <div style={{ fontFamily: "'IM Fell English',Georgia,serif", fontSize: 9, color: "#7a5020", marginTop: 6, fontStyle: "italic" }}>
+                    Digite um número de rodadas ou clique em ∞ para permanente.
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        </Secao>
 
         <DiamondDivider />
 
