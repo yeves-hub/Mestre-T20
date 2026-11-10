@@ -686,7 +686,8 @@ function rolarEquipamento(usar2D = false) {
   const rollItem = rolarD100();
   const resultado = consultarTabela(tabela, rollItem);
   
-  const detalhes = tipo === "Arma" ? (T8_4.detalhesArmas[resultado.valor] || null) : null;
+  const detalhes = tipo === "Arma" ? (T8_4.detalhesArmas[resultado.valor] || null) :
+                   tipo === "Armadura/Escudo" ? (T8_4.detalhesArmaduras[resultado.valor] || null) : null;
   
   return {
     tipo: "Equipamento",
@@ -982,7 +983,16 @@ function rolarRiqueza(tipoRiqueza, usarBonus = false) {
       break;
     }
   }
-  
+
+  return resultado || {
+    roll,
+    valor: "???",
+    exemplos: "Resultado não encontrado na tabela",
+    tipo: tipoRiqueza,
+    valorTotal: 0,
+    detalhesValor: "Rolagem fora das faixas da tabela"
+  };
+
   return resultado;
 }
 
@@ -1182,7 +1192,7 @@ function ResultadoItens({ itens, onRerollSuperior, onRerollMagico, onRerollMelho
   return (
     <div>
       <div style={{ fontFamily: "'Cinzel',serif", fontSize: 10, letterSpacing: 1, color: "#7a5020", marginBottom: 6 }}>
-         ITENS
+        🎁 ITENS
       </div>
       <div style={{ fontFamily: "'IM Fell English',Georgia,serif", fontSize: 13, color: "#f0d8a0", lineHeight: 1.6 }}>
         <div>Rolagem: <b style={{ color: "#e8a020" }}>{itens.roll}</b> (faixa {itens.faixa})</div>
@@ -2185,6 +2195,20 @@ function ModoRolagemTesouro({ nd }) {
     const v = parseInt(valor);
     if (isNaN(v)) return;
 
+     // Validação básica
+    if (pedido.lados === 100 && (v < 1 || v > 100)) {
+      alert("O resultado do d% deve ser entre 1 e 100!");
+      return;
+    }
+    if (pedido.lados === 20 && (v < 1 || v > 20)) {
+      alert("O resultado do d20 deve ser entre 1 e 20!");
+      return;
+    }
+    if (pedido.lados === 6 && (v < 1 || v > 6)) {
+      alert("O resultado do d6 deve ser entre 1 e 6!");
+      return;
+    }
+
     const novoManual = aplicarValorManual(manual, pedido.chave, v);
     const novoPedido = proximoPedidoManual(novoManual);
 
@@ -2536,7 +2560,13 @@ export default function App() {
 
   useEffect(() => {
     if (rodada > 1) {
-      decrementarCondicoes();
+      setCombatentes(prev => prev.map(c => {
+        if (!c.condicoesAtivas || c.condicoesAtivas.length === 0) return c;
+        const novas = c.condicoesAtivas
+          .map(cond => cond.duracao === "perm" ? cond : { ...cond, duracao: cond.duracao - 1 })
+          .filter(cond => cond.duracao === "perm" || cond.duracao > 0);
+        return { ...c, condicoesAtivas: novas };
+      }));
     }
   }, [rodada]);
 
@@ -2654,15 +2684,6 @@ export default function App() {
               )}
             </>
           )}
-
-          {ultimoResultado && (
-            <ResultadoTesouro
-              resultado={ultimoResultado}
-              onRerollSuperior={handleRerollSuperior}
-              onRerollMagico={handleRerollMagico}
-              onRerollMelhoriaSuperior={handleRerollMelhoriaSuperior}
-            />
-          )}
         </Secao>
 
         <DiamondDivider />
@@ -2684,7 +2705,7 @@ export default function App() {
                   ND {r.nd}
                 </div>
                 <div>💰 {r.dinheiro.expressao}</div>
-                <div> {r.itens.expressao}</div>
+                <div>🎁 {r.itens.expressao}</div>
               </div>
             ))}
           </Secao>
