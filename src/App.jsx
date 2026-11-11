@@ -2358,21 +2358,31 @@ function ModoRolagemTesouro({ nd }) {
 // SEÇÃO 7 — APP PRINCIPAL
 // ═══════════════════════════════════════════════════
 export default function App() {
-  const [ndSelecionado, setNdSelecionado] = useState("5");
+    // ─── Funções auxiliares para ler/salvar no navegador ───
+  const lerDoNavegador = (chave, valorPadrao) => {
+    try {
+      const salvo = localStorage.getItem(chave);
+      return salvo !== null ? JSON.parse(salvo) : valorPadrao;
+    } catch {
+      return valorPadrao;
+    }
+  };
+
+  const [ndSelecionado, setNdSelecionado] = useState(() => lerDoNavegador("t20_nd", "5"));
   const [modoRolagem, setModoRolagem] = useState(false);
   const [ultimoResultado, setUltimoResultado] = useState(null);
-  const [historico, setHistorico] = useState([]);
-  const [dadosQtd, setDadosQtd] = useState("1");
-  const [dadosLados, setDadosLados] = useState("d20");
-  const [dadosMod, setDadosMod] = useState("0");
+  const [historico, setHistorico] = useState(() => lerDoNavegador("t20_historicoTesouros", []));
+  const [dadosQtd, setDadosQtd] = useState(() => lerDoNavegador("t20_dadosQtd", "1"));
+  const [dadosLados, setDadosLados] = useState(() => lerDoNavegador("t20_dadosLados", "d20"));
+  const [dadosMod, setDadosMod] = useState(() => lerDoNavegador("t20_dadosMod", "0"));
   const [dadosResultado, setDadosResultado] = useState(null);
-  const [dadosHistorico, setDadosHistorico] = useState([]);
-  const [combatentes, setCombatentes] = useState([]);
+  const [dadosHistorico, setDadosHistorico] = useState(() => lerDoNavegador("t20_historicoDados", []));
+  const [combatentes, setCombatentes] = useState(() => lerDoNavegador("t20_combatentes", []));
   const [novoNome, setNovoNome] = useState("");
   const [novaIniciativa, setNovaIniciativa] = useState("");
   const [novasCondicoes, setNovasCondicoes] = useState("");
-  const [turnoAtual, setTurnoAtual] = useState(null);
-  const [rodada, setRodada] = useState(1);
+  const [turnoAtual, setTurnoAtual] = useState(() => lerDoNavegador("t20_turnoAtual", null));
+  const [rodada, setRodada] = useState(() => lerDoNavegador("t20_rodada", 1));
   const [combatenteCondicaoId, setCombatenteCondicaoId] = useState(null);
   const [condicaoSel, setCondicaoSel] = useState(CONDICOES_T20[0]);
   const [condicaoDuracao, setCondicaoDuracao] = useState("1");
@@ -2463,6 +2473,31 @@ export default function App() {
     setTurnoAtual(null);
     setRodada(1);
     setCombatenteCondicaoId(null);
+  };
+  
+  const limparDadosSalvos = () => {
+    if (!window.confirm("Isso vai apagar TUDO: combatentes, histórico de tesouros e de dados. Continuar?")) return;
+    localStorage.removeItem("t20_nd");
+    localStorage.removeItem("t20_historicoTesouros");
+    localStorage.removeItem("t20_dadosQtd");
+    localStorage.removeItem("t20_dadosLados");
+    localStorage.removeItem("t20_dadosMod");
+    localStorage.removeItem("t20_historicoDados");
+    localStorage.removeItem("t20_combatentes");
+    localStorage.removeItem("t20_turnoAtual");
+    localStorage.removeItem("t20_rodada");
+    // Reseta o estado na tela também
+    setHistorico([]);
+    setDadosHistorico([]);
+    setCombatentes([]);
+    setTurnoAtual(null);
+    setRodada(1);
+    setDadosQtd("1");
+    setDadosLados("d20");
+    setDadosMod("0");
+    setDadosResultado(null);
+    setNdSelecionado("5");
+    window.location.reload();
   };
 
   const adicionarCombatente = () => {
@@ -2557,6 +2592,31 @@ export default function App() {
       return { ...c, condicoesAtivas: novas };
     }));
   };
+
+  // ─── Salvar automaticamente no navegador ───
+  useEffect(() => {
+    localStorage.setItem("t20_nd", JSON.stringify(ndSelecionado));
+  }, [ndSelecionado]);
+
+  useEffect(() => {
+    localStorage.setItem("t20_historicoTesouros", JSON.stringify(historico));
+  }, [historico]);
+
+  useEffect(() => {
+    localStorage.setItem("t20_dadosQtd", JSON.stringify(dadosQtd));
+    localStorage.setItem("t20_dadosLados", JSON.stringify(dadosLados));
+    localStorage.setItem("t20_dadosMod", JSON.stringify(dadosMod));
+  }, [dadosQtd, dadosLados, dadosMod]);
+
+  useEffect(() => {
+    localStorage.setItem("t20_historicoDados", JSON.stringify(dadosHistorico));
+  }, [dadosHistorico]);
+
+  useEffect(() => {
+    localStorage.setItem("t20_combatentes", JSON.stringify(combatentes));
+    localStorage.setItem("t20_turnoAtual", JSON.stringify(turnoAtual));
+    localStorage.setItem("t20_rodada", JSON.stringify(rodada));
+  }, [combatentes, turnoAtual, rodada]);
 
   useEffect(() => {
     if (rodada > 1) {
@@ -2732,7 +2792,7 @@ export default function App() {
                 onClick={() => setDadosLados(d)}
                 style={{
                   ...s.btn,
-                  padding: "8px 12px",
+                  padding: "5px 8px",
                   fontSize: 11,
                   letterSpacing: 1,
                   border: dadosLados === d ? "2px solid #e8a020" : "1px solid #8b5e1a",
@@ -3132,6 +3192,25 @@ export default function App() {
           marginTop: 20
         }}>
           MESTRE T20 · ROLADOR COMPLETO
+          <div style={{ marginTop: 10 }}>
+            <button
+              onClick={limparDadosSalvos}
+              style={{
+                padding: "6px 12px",
+                borderRadius: 4,
+                border: "1px solid #a04040",
+                background: "#1c0e00",
+                color: "#a04040",
+                fontFamily: "'Cinzel',serif",
+                fontSize: 9,
+                letterSpacing: 1,
+                cursor: "pointer",
+                textTransform: "uppercase"
+              }}
+            >
+              🗑 Limpar todos os dados salvos
+            </button>
+          </div>
         </div>
       </div>
     </>
