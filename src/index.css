@@ -52,6 +52,31 @@
 
 body {
   margin: 0;
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  min-height: 100dvh;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+body {
+  background: #0d0700;
+  color: #f0d8a0;
+  font-family: 'IM Fell English', Georgia, serif;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+@media (min-width: 1024px) {
+  #root {
+    max-width: 900px;
+    margin: 0 auto;
+  }
 }
 
 #root {

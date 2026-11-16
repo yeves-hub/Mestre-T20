@@ -46,13 +46,17 @@ const CONDICOES_T20 = [
 // ═══════════════════════════════════════════════════
 const s = {
   root: {
-    minHeight: "100vh",
+    minHeight: "100dvh",          // melhor pra celular com barras do sistema
+    width: "100%",
+    maxWidth: "100%",
+    overflowX: "hidden",          // evita rolagem horizontal indesejada
     background: "linear-gradient(160deg,#1c0e00,#0d0700)",
     color: "#f0d8a0",
     fontFamily: "'IM Fell English', Georgia, serif",
     padding: "16px",
     boxSizing: "border-box",
   },
+  
   topo: {
     textAlign: "center",
     marginBottom: 20,
