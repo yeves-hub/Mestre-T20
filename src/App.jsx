@@ -1102,6 +1102,46 @@ function rolarTesouro(nd) {
   };
 }
 
+// ─── Descrições oficiais das condições (Livro Básico T20) ───
+const CONDICOES_INFO = {
+  "Abalado": { desc: "O personagem sofre –2 em testes de perícia. Se ficar abalado novamente, em vez disso fica apavorado.", tipo: "Medo" },
+  "Agarrado": { desc: "O personagem fica desprevenido e imóvel, sofre –2 em testes de ataque e só pode atacar com armas leves. Ataques à distância contra um alvo envolvido em uma manobra agarrar têm 50% de chance de acertar o alvo errado.", tipo: "Movimento" },
+  "Alquebrado": { desc: "O custo em pontos de mana das habilidades do personagem aumenta em +1.", tipo: "Mental" },
+  "Apavorado": { desc: "O personagem sofre –5 em testes de perícia e não pode se aproximar voluntariamente da fonte do medo.", tipo: "Medo" },
+  "Atordoado": { desc: "O personagem fica desprevenido e não pode fazer ações.", tipo: "Mental" },
+  "Caído": { desc: "O personagem sofre –5 na Defesa contra ataques corpo a corpo e recebe +5 na Defesa contra ataques à distância. Além disso, sofre –5 em ataques corpo a corpo e seu deslocamento é reduzido a 1,5m.", tipo: "" },
+  "Cego": { desc: "O personagem fica desprevenido e lento, não pode fazer testes de Percepção para observar e sofre –5 em testes de perícias baseadas em Força ou Destreza. Todos os alvos de seus ataques recebem camuflagem total.", tipo: "Sentidos" },
+  "Confuso": { desc: "O personagem comporta-se de modo aleatório. Role 1d6 no início de seus turnos: 1) Movimenta-se em uma direção escolhida por uma rolagem de 1d8; 2-3) Não pode fazer ações, balbuciando incoerentemente; 4-5) Ataca a criatura mais próxima com a arma empunhada, ou a si mesmo se estiver sozinho; 6) A condição termina e pode agir normalmente.", tipo: "Mental" },
+  "Debilitado": { desc: "O personagem sofre –5 em testes de Força, Destreza e Constituição e de perícias baseadas nesses atributos. Se ficar debilitado novamente, em vez disso fica inconsciente.", tipo: "" },
+  "Desprevenido": { desc: "O personagem sofre –5 na Defesa e em Reflexos. Você fica desprevenido contra inimigos que não possa perceber.", tipo: "" },
+  "Doente": { desc: "Sob efeito de uma doença.", tipo: "Metabolismo" },
+  "Em Chamas": { desc: "O personagem está pegando fogo. No início de seus turnos, sofre 1d6 pontos de dano de fogo. Pode gastar uma ação padrão para apagar o fogo com as mãos. Imersão em água também apaga as chamas.", tipo: "" },
+  "Enfeitiçado": { desc: "O personagem se torna prestativo em relação à fonte da condição. A fonte recebe +10 em testes de Diplomacia com o personagem.", tipo: "Mental" },
+  "Enjoado": { desc: "O personagem só pode realizar uma ação padrão ou de movimento (não ambas) por rodada. Investida avança no máximo o deslocamento (não o dobro).", tipo: "Metabolismo" },
+  "Enredado": { desc: "O personagem fica lento, vulnerável e sofre –2 em testes de ataque.", tipo: "Movimento" },
+  "Envenenado": { desc: "O efeito varia de acordo com o veneno. Pode ser perda de vida recorrente ou outra condição (como fraco ou enjoado). Perda de vida recorrente por venenos é cumulativa.", tipo: "Veneno" },
+  "Esmorecido": { desc: "O personagem sofre –5 em testes de Inteligência, Sabedoria e Carisma e de perícias baseadas nesses atributos.", tipo: "Mental" },
+  "Exausto": { desc: "O personagem fica debilitado, lento e vulnerável. Se ficar exausto novamente, em vez disso fica inconsciente.", tipo: "Cansaço" },
+  "Fascinado": { desc: "Com a atenção presa em alguma coisa. Sofre –5 em Percepção e não pode fazer ações, exceto observar aquilo que o fascinou. Anulada por ações hostis ou se o que fascinou não estiver mais visível. Balançar a criatura gasta uma ação padrão.", tipo: "Mental" },
+  "Fatigado": { desc: "O personagem fica fraco e vulnerável. Se ficar fatigado novamente, em vez disso fica exausto.", tipo: "Cansaço" },
+  "Fraco": { desc: "O personagem sofre –2 em testes de Força, Destreza e Constituição e de perícias baseadas nesses atributos. Se ficar fraco novamente, em vez disso fica debilitado.", tipo: "" },
+  "Frustrado": { desc: "O personagem sofre –2 em testes de Inteligência, Sabedoria e Carisma e de perícias baseadas nesses atributos. Se ficar frustrado novamente, em vez disso fica esmorecido.", tipo: "Mental" },
+  "Imóvel": { desc: "Todas as formas de deslocamento do personagem são reduzidas a 0m.", tipo: "Movimento" },
+  "Inconsciente": { desc: "O personagem fica indefeso e não pode fazer ações, incluindo reações (mas ainda pode fazer testes de Constituição para estabilizar sangramento). Balançar a criatura gasta uma ação padrão.", tipo: "" },
+  "Indefeso": { desc: "O personagem fica desprevenido, sofre –10 na Defesa, falha automaticamente em testes de Reflexos e pode sofrer golpes de misericórdia.", tipo: "" },
+  "Lento": { desc: "Todas as formas de deslocamento são reduzidas à metade (arredonde para baixo para o primeiro incremento de 1,5m) e não pode correr ou fazer investidas.", tipo: "Movimento" },
+  "Ofuscado": { desc: "O personagem sofre –2 em testes de ataque e de Percepção.", tipo: "Sentidos" },
+  "Paralisado": { desc: "Fica imóvel e indefeso e só pode realizar ações puramente mentais.", tipo: "Movimento" },
+  "Pasmo": { desc: "Não pode fazer ações.", tipo: "Mental" },
+  "Petrificado": { desc: "O personagem fica inconsciente e recebe redução de dano 8.", tipo: "Metamorfose" },
+  "Sangrando": { desc: "No início de seu turno, teste de Constituição (CD 15). Se falhar, perde 1d6 pontos de vida e continua sangrando. Se passar, remove a condição.", tipo: "Metabolismo" },
+  "Sobrecarregado": { desc: "O personagem sofre penalidade de armadura –5 e seu deslocamento é reduzido em –3m.", tipo: "Movimento" },
+  "Surdo": { desc: "Não pode fazer testes de Percepção para ouvir e sofre –5 em testes de Iniciativa. Considerado em condição ruim para lançar magias.", tipo: "Sentidos" },
+  "Surpreendido": { desc: "O personagem fica desprevenido e não pode fazer ações.", tipo: "" },
+  "Vulnerável": { desc: "O personagem sofre –2 na Defesa.", tipo: "" },
+};
+
+
 // ═══════════════════════════════════════════════════
 // SEÇÃO 6 — COMPONENTES VISUAIS
 // ═══════════════════════════════════════════════════
@@ -2184,6 +2224,7 @@ function ModoRolagemTesouro({ nd }) {
   const [valor, setValor] = useState("");
   const [concluido, setConcluido] = useState(null);
   const [log, setLog] = useState([]);
+  const [condicaoSelecionada, setCondicaoSelecionada] = useState(null);
 
   const reiniciar = () => {
     const novo = criarManual(nd);
@@ -2390,6 +2431,8 @@ export default function App() {
   const [combatenteCondicaoId, setCombatenteCondicaoId] = useState(null);
   const [condicaoSel, setCondicaoSel] = useState(CONDICOES_T20[0]);
   const [condicaoDuracao, setCondicaoDuracao] = useState("1");
+  const [condicaoModal, setCondicaoModal] = useState(null);
+  const [condicaoAberta, setCondicaoAberta] = useState(null);
 
   const ndsDisponiveis = Object.keys(T8_1);
 
@@ -3054,25 +3097,29 @@ export default function App() {
                   )}
                   {c.condicoesAtivas && c.condicoesAtivas.length > 0 && (
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 4 }}>
-                      {c.condicoesAtivas.map((cond, idx) => (
-                        <div
-                          key={idx}
-                          onClick={() => removerCondicao(c.id, idx)}
-                          style={{
-                            padding: "2px 6px",
-                            borderRadius: 3,
-                            background: "#5a301066",
-                            border: "1px solid #8b5e1a",
-                            fontFamily: "'IM Fell English',Georgia,serif",
-                            fontSize: 9,
-                            color: "#e8a020",
-                            cursor: "pointer"
-                          }}
-                          title="Clique para remover"
-                        >
-                          {cond.nome} {cond.duracao === "perm" ? "∞" : `(${cond.duracao})`}
-                        </div>
-                      ))}
+                      {c.condicoesAtivas.map((cond, idx) => {
+                        const info = CONDICOES_INFO[cond.nome];
+                        const expiraProximo = cond.duracao !== "perm" && cond.duracao <= 1;
+                        return (
+                          <div
+                            key={idx}
+                            onClick={() => setCondicaoModal({ nome: cond.nome, info, duracao: cond.duracao, expiraProximo, idCombatente: c.id, indice: idx })}
+                            style={{
+                              padding: "2px 6px",
+                              borderRadius: 3,
+                              background: expiraProximo ? "#a0404066" : "#5a301066",
+                              border: expiraProximo ? "1px solid #a04040" : "1px solid #8b5e1a",
+                              fontFamily: "'IM Fell English',Georgia,serif",
+                              fontSize: 9,
+                              color: expiraProximo ? "#ffcccc" : "#e8a020",
+                              cursor: "pointer"
+                            }}
+                            title="Clique para ver descrição"
+                          >
+                            {cond.nome} {cond.duracao === "perm" ? "∞" : `(${cond.duracao})`}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -3182,6 +3229,220 @@ export default function App() {
                 </div>
               );
             })()}
+          </div>
+        </Secao>
+
+        <DiamondDivider />
+
+        {/* ─── Modal de descrição da condição ─── */}
+        {condicaoModal && (
+          <div
+            onClick={() => setCondicaoModal(null)}
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: "rgba(0,0,0,0.75)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 1000,
+              padding: "20px"
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                background: "linear-gradient(160deg, #2a1500, #1c0e00)",
+                border: "2px solid #a07830",
+                borderRadius: 8,
+                padding: "20px",
+                maxWidth: "90%",
+                width: "340px",
+                boxShadow: "0 8px 24px rgba(0,0,0,0.8)"
+              }}
+            >
+              {/* Cabeçalho */}
+              <div style={{
+                fontFamily: "'Cinzel',serif",
+                fontSize: 18,
+                color: "#f0d8a0",
+                marginBottom: 4,
+                borderBottom: "1px solid #a07830",
+                paddingBottom: 8,
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center"
+              }}>
+                <span>{condicaoModal.nome}</span>
+                {condicaoModal.info?.tipo && (
+                  <span style={{
+                    fontSize: 11,
+                    color: "#a07830",
+                    fontStyle: "italic",
+                    fontWeight: 400
+                  }}>
+                    {condicaoModal.info.tipo}
+                  </span>
+                )}
+              </div>
+
+              {/* Duração */}
+              <div style={{
+                fontSize: 11,
+                color: "#7a5020",
+                marginBottom: 10,
+                fontFamily: "'Cinzel',serif",
+                letterSpacing: 1
+              }}>
+                Duração: {condicaoModal.duracao === "perm" ? "∞ Permanente" : `${condicaoModal.duracao} rodada${condicaoModal.duracao > 1 ? "s" : ""}`}
+                {condicaoModal.expiraProximo && (
+                  <span style={{ color: "#a04040", marginLeft: 8 }}>⚠️ Expira no próximo turno</span>
+                )}
+              </div>
+
+              {/* Descrição */}
+              <div style={{
+                fontSize: 14,
+                lineHeight: 1.6,
+                color: "#f0d8a0",
+                textAlign: "justify",
+                fontFamily: "'IM Fell English',Georgia,serif",
+                marginBottom: 16
+              }}>
+                {condicaoModal.info?.desc || "Sem descrição disponível no livro."}
+              </div>
+
+              {/* Botões */}
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  onClick={() => {
+                    removerCondicao(condicaoModal.idCombatente, condicaoModal.indice);
+                    setCondicaoModal(null);
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: "8px",
+                    borderRadius: 4,
+                    border: "1px solid #a04040",
+                    background: "#3a1010",
+                    color: "#ffaaaa",
+                    fontFamily: "'Cinzel',serif",
+                    fontSize: 11,
+                    cursor: "pointer",
+                    letterSpacing: 1
+                  }}
+                >
+                  ✖ Remover
+                </button>
+                <button
+                  onClick={() => setCondicaoModal(null)}
+                  style={{
+                    flex: 1,
+                    padding: "8px",
+                    borderRadius: 4,
+                    border: "1px solid #a07830",
+                    background: "#3a1e00",
+                    color: "#f0d8a0",
+                    fontFamily: "'Cinzel',serif",
+                    fontSize: 11,
+                    cursor: "pointer",
+                    letterSpacing: 1
+                  }}
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <Secao icone="📖" titulo="Consulta de Condições">
+          <div style={{
+            fontFamily: "'IM Fell English',Georgia,serif",
+            fontSize: 11,
+            color: "#7a5020",
+            marginBottom: 10,
+            fontStyle: "italic"
+          }}>
+            Toque em uma condição para ver sua descrição completa.
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {CONDICOES_T20.map((nome) => {
+              const info = CONDICOES_INFO[nome];
+              const aberta = condicaoAberta === nome;
+              return (
+                <div
+                  key={nome}
+                  style={{
+                    borderRadius: 4,
+                    border: aberta ? "1px solid #c8922a" : "1px solid #8b5e1a55",
+                    background: aberta ? "#2a150066" : "#0d070066",
+                    overflow: "hidden"
+                  }}
+                >
+                  <div
+                    onClick={() => setCondicaoAberta(aberta ? null : nome)}
+                    style={{
+                      padding: "8px 10px",
+                      cursor: "pointer",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: 8
+                    }}
+                  >
+                    <div style={{
+                      fontFamily: "'Cinzel',serif",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      color: aberta ? "#e8a020" : "#f0d8a0",
+                      flex: 1
+                    }}>
+                      {nome}
+                    </div>
+                    {info?.tipo && (
+                      <div style={{
+                        fontFamily: "'IM Fell English',Georgia,serif",
+                        fontSize: 9,
+                        color: "#7a5020",
+                        fontStyle: "italic",
+                        flexShrink: 0
+                      }}>
+                        {info.tipo}
+                      </div>
+                    )}
+                    <div style={{
+                      color: "#c8922a",
+                      fontSize: 10,
+                      transform: aberta ? "rotate(180deg)" : "rotate(0deg)",
+                      transition: "transform 0.2s",
+                      flexShrink: 0
+                    }}>
+                      ▼
+                    </div>
+                  </div>
+
+                  {aberta && (
+                    <div style={{
+                      padding: "10px 12px",
+                      borderTop: "1px solid #8b5e1a55",
+                      background: "#1c0e0066",
+                      fontFamily: "'IM Fell English',Georgia,serif",
+                      fontSize: 13,
+                      lineHeight: 1.6,
+                      color: "#f0d8a0",
+                      textAlign: "justify"
+                    }}>
+                      {info?.desc || "Sem descrição disponível."}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </Secao>
 
